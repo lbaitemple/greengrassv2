@@ -1,0 +1,17 @@
+RecipeFormatVersion: '2020-01-25'
+ComponentName: com.snap.robomaker.HelloWorld
+ComponentVersion: 1.0.0
+ComponentDescription: AWS RoboMaker application to rotate a Turtlebot3
+ComponentPublisher: Amazon
+Manifests:
+  - Platform:
+      os: linux
+      architecture: aarch64
+    Lifecycle:
+      Install:
+        RequiresPrivilege: true
+        Script: sudo snap install --devmode {artifacts:path}/aws-hello-world_0.1_aarch64.snap
+      Run:
+        Script: /snap/bin/hello-world.launch
+    Artifacts:
+      - Uri: s3://<S3_BUCKET>/aws-hello-world_0.1_aarch64.snap
