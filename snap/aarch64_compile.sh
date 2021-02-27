@@ -70,8 +70,9 @@ while [ "$ec2_id" == 'None' ]; do
 	    --query "Stacks[0].StackStatus" \
 	    --output text)
 	if [ "$status" == 'ROLLBACK_COMPLETE' ]; then
-		echo "[ERROR] Something went wrong!"
+
 		cleanup
+		echo "[ERROR] Something went wrong with cloudformation creatation!"
 		exit 1;
 	fi
 done
@@ -107,8 +108,8 @@ if [ "$(get_status $ec2_id)" == "COMPLETE" ]; then
 	echo -e "\n- Retrieving snap"
 	aws s3 cp s3://$name/$(aws s3 ls s3://$name/ | awk '{print $4}' | grep -i .snap) .
 else
-	echo "[ERROR] Something went wrong!"
 	cleanup
+	echo "\n[ERROR] Something went wrong!"
 	exit -2
 fi
 
