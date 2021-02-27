@@ -1,0 +1,96 @@
+Parameters:
+  UniqueName:
+    Type: String
+
+Resources:
+  Aarch64InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref Aarch64AccessRole
+
+  Aarch64AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+
+  RolePolicies:
+    Type: AWS::IAM::Policy
+    DependsOn:
+      - Aarch64Instance
+    Properties:
+      PolicyName: Aarch64AccessPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: 's3:ListBucket'
+            Resource: !Sub 'arn:aws:s3:::${UniqueName}'
+          - Effect: Allow
+            Action: 's3:*Object'
+            Resource: !Sub 'arn:aws:s3:::${UniqueName}/*'
+          - Effect: Allow
+            Action: 'ec2:CreateTags'
+            Resource: !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+            Condition:
+              StringEquals:
+                ec2:ResourceTag/Name: !Ref UniqueName
+      Roles:
+        - !Ref Aarch64AccessRole
+
+
+  SSHSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+
+  Aarch64Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: ec2-keypair
+      InstanceType: t4g.micro
+      ImageId: ami-087fa126bfdebc5c3  # Ubuntu 18.04 Aarch64
+      IamInstanceProfile: !Ref Aarch64InstanceProfile
+      SecurityGroups:
+        - !Ref SSHSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Ref UniqueName
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+          apt update
+          apt install -y awscli
+
+          aws ec2 create-tags --resources $instance_id --region ${AWS::Region} --tags Key=Status,Value=CONFIGURING
+          apt remove lxd-client -y
+          snap install lxd
+          lxd init --auto
+          snap install snapcraft --classic
+
+          aws ec2 create-tags --resources $instance_id --region ${AWS::Region} --tags Key=Status,Value=SNAPPING
+          mkdir -p /tmp/robomaker_snap
+          cd tmp/robomaker_snap
+          aws s3 cp s3://${UniqueName}/src src/ --recursive
+          aws s3 cp s3://${UniqueName}/snap snap/ --recursive
+          snapcraft --use-lxd
+          aws s3 cp *.snap s3://${UniqueName}/
+
+          aws ec2 create-tags --resources $instance_id --region ${AWS::Region} --tags Key=Status,Value=COMPLETE
+          echo 'Exiting user data script'
+
+Outputs:
+  InstanceId:
+    Value: !Ref Aarch64Instance
